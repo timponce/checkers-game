@@ -49,7 +49,6 @@ class Checkers:
     def __init__(self):
         self._board = self.create_board()
         self._players = []
-        self._player_turn = "None"
         self._last_move = {"player": None, "starting_square": None, "ending_square": None}
 
     def create_board(self):
@@ -66,7 +65,7 @@ class Checkers:
                 if i not in {3, 4} and sum(coord) % 2 != 0:
                     board[tuple(coord)] = piece
                 else:
-                    board[tuple(coord)] = "None"
+                    board[tuple(coord)] = None
         return board
 
     def create_player(self, player_name, piece_color):
@@ -110,8 +109,10 @@ class Checkers:
 
         # check player_name exists
         player = self.get_player(player_name)
+        for i in range(len(self._players)):
+            if player != self._players[i]:
+                opponent = self._players[i]
         player_color = player.get_piece_color()
-        change_turn_bool = True
         pieces_captured = 0
 
         # set home and opponent ranks
@@ -122,35 +123,32 @@ class Checkers:
             player_home_rank = opponent_home_rank
             opponent_home_rank = temp
 
-        # check if player making move out of turn
-        if self._player_turn.get_player_name() != player_name:
-            raise OutofTurn("It is not this player's turn")
-
         # check if the starting square is valid and owned by player/is valid
-        if self.get_checker_details(starting_square_location) != player.get_piece_color():
-            raise InvalidSquare("Invalid starting square")
+        if self.get_checker_details(starting_square_location):
+            if player_color not in self.get_checker_details(starting_square_location):
+                raise InvalidSquare("Invalid starting square")
 
         # check if destination square exists/is valid
         self.get_checker_details(destination_square_location)
 
+        player_piece = self.get_checker_details(starting_square_location)
+
         # update board and check for promotions
-        self._board[starting_square_location] = "None"
+        self._board[starting_square_location] = None
         # if opponent home row, piece == king
         # if home row, piece == triple king
         # else, piece == piece
-        if destination_square_location[1] == opponent_home_rank:
-            self._board[destination_square_location] = player_color + "_king"
+        if destination_square_location[0] == opponent_home_rank:
+            self._board[destination_square_location] = f"{player_color}_king"
+            player.inc_king_count(1)
             change_turn_bool = False
-        elif destination_square_location[1] == opponent_home_rank:
-            self._board[destination_square_location] = player_color + "_Triple_King"
+        elif destination_square_location[0] == player_home_rank:
+            self._board[destination_square_location] = f"{player_color}_Triple_King"
+            player.inc_king_count(-1)
+            player.inc_triple_king_count(1)
             change_turn_bool = False
         else:
-            self._board[destination_square_location] = player_color
-
-        # check out of turn
-        if self._last_move["player"] == player and not (
-                self._last_move["ending_square"] == starting_square_location and pieces_captured > 0):
-            raise OutofTurn("It is not this player's turn")
+            self._board[destination_square_location] = player_piece
 
         # check for captures
         squares_jumped = abs(destination_square_location[1] - starting_square_location[1]) - 1
@@ -162,14 +160,21 @@ class Checkers:
             stepper[1] = -1
         for i in range(squares_jumped):
             this_square = step_coord(this_square, stepper)
-            if self.get_checker_details(this_square) is not None:
+            this_piece = self.get_checker_details(this_square)
+            if this_piece is not None:
+                if "_king" in this_piece:
+                    opponent.inc_king_count(-1)
+                elif "_Triple_King" in this_piece:
+                    opponent.inc_triple_king_count(-1)
                 pieces_captured += 1
-                self._board[tuple(this_square)] = "None"
+                self._board[tuple(this_square)] = None
+
+        # check out of turn
+        if self._last_move["player"] == player and not (
+                self._last_move["ending_square"] == starting_square_location and pieces_captured > 0):
+            raise OutofTurn("It is not this player's turn")
 
         player.inc_captured_pieces_count(pieces_captured)
-        # change turn if needed
-        if change_turn_bool:
-            self.change_turn()
 
         self._last_move["player"] = player
         self._last_move["starting_square"] = starting_square_location
@@ -205,8 +210,8 @@ class Checkers:
         all_symbols = [
             "\033[97m\033[7m   \033[0m" if val == "White" else "\033[97m\033[7m k \033[0m" if val == "White_king"
             else "\033[97m\033[7m K \033[0m" if val == "White_Triple_King" else "\033[90m\033[7m\033[1m   \033[0m"
-            if val == "Black" else "\033[90m\033[7m\033[1m k \033[0m" if val == "Black" else
-            "\033[90m\033[7m\033[1m K \033[0m" if val == "Black" else "   " for val in all_pieces]
+            if val == "Black" else "\033[90m\033[7m\033[1m k \033[0m" if val == "Black_king" else
+            "\033[90m\033[7m\033[1m K \033[0m" if val == "Black_Triple_King" else "   " for val in all_pieces]
         print()
         print(f"   +  -  +  -  +  -  +  -  +  -  +  -  +  -  +  -  +")
         for i in range(0, 64, 4):
