@@ -163,8 +163,10 @@ class Checkers:
         for i in range(squares_jumped):
             this_square = step_coord(this_square, stepper)
             if self.get_checker_details(this_square) is not None:
-                player.inc_captured_pieces_count(1)
+                pieces_captured += 1
                 self._board[tuple(this_square)] = "None"
+
+        player.inc_captured_pieces_count(pieces_captured)
         # change turn if needed
         if change_turn_bool:
             self.change_turn()
@@ -172,10 +174,8 @@ class Checkers:
         self._last_move["player"] = player
         self._last_move["starting_square"] = starting_square_location
         self._last_move["ending_square"] = destination_square_location
-        # not checking for valid destination. only for destination is first/last row
-        # who's turn is it
-        # return num of captured pieces, else 0
-        # king promote, triple king promote
+
+        return pieces_captured
 
     def get_checker_details(self, square_location):
         """Returns the piece that is on a square"""
