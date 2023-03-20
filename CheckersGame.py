@@ -1,6 +1,6 @@
 # Author: Timothy Ponce
 # GitHub Username: timponce
-# Date: 2023-03-01
+# Date: 2023-03-19
 # Description: Two player checkers game
 
 class OutofTurn(Exception):

@@ -177,7 +177,6 @@ class UnitTests(unittest.TestCase):
         game.play_game("Adam", (3, 6), (4, 5))
         game.play_game("Lucy", (1, 0), (6, 5))
         game.play_game("Adam", (4, 5), (5, 4))
-        game.pretty_print_board()
         game.play_game("Lucy", (6, 5), (7, 4))
         self.assertEqual(Player2.get_king_count(), 0)
         self.assertEqual(Player2.get_triple_king_count(), 1)
