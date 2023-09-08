@@ -262,3 +262,7 @@ class Player:
     def inc_captured_pieces_count(self, val):
         """Updates the number of opponent pieces that the player has captured"""
         self._player_pieces["captured"] += val
+
+
+game = Checkers()
+game.pretty_print_board()

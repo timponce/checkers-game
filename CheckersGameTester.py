@@ -188,6 +188,5 @@ class UnitTests(unittest.TestCase):
         self.assertEqual(Player2.get_captured_pieces_count(), 12)
         self.assertEqual(game.game_winner(), "Lucy")
 
-
 if __name__ == "__main__":
     unittest.main()
