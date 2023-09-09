@@ -3,8 +3,10 @@
 # Date: 2023-03-19
 # Description: Two player checkers game
 
+
 class OutofTurn(Exception):
     """Raised when a player attempts to move a piece out of turn"""
+
     pass
 
 
@@ -13,21 +15,25 @@ class InvalidSquare(Exception):
     Raised when a player attempts to move a piece they do not own or to/from a square that
     does not exist on the board
     """
+
     pass
 
 
 class InvalidPlayer(Exception):
     """Raised if player_name is not valid"""
+
     pass
 
 
 class ExceedPlayerCount(Exception):
     """Raised when a third player is attempted to be added"""
+
     pass
 
 
 class InvalidColor(Exception):
     """Raised when a player attempts to use a color that is already associated with another player"""
+
     pass
 
 
@@ -43,27 +49,156 @@ def step_coord(tup, stepper):
     return tup[0] + stepper[0], tup[1] + stepper[1]
 
 
+import pyxel
+
+SCREEN_WIDTH = 256
+SCREEN_HEIGHT = 256
+
+TILE_WIDTH = 32
+TILE_HEIGHT = 32
+
+
+class Checker:
+    def __init__(self, file, rank, color, status):
+        self.file = file
+        self.rank = rank
+        self.color = color
+        self.status = status
+
+    def draw(self):
+        pyx_u = 0
+        pyx_v = 0
+
+        if self.color == "Black":
+            pyx_v = 32
+        else:
+            pyx_v = 0
+
+        if self.status == "standard":
+            pyx_u = 0
+        elif self.status == "king":
+            pyx_u = 32
+        else:
+            pyx_u = 64
+
+        pyxel.blt(
+            self.file * TILE_WIDTH,
+            self.rank * TILE_HEIGHT,
+            0,
+            pyx_u,
+            pyx_v,
+            TILE_WIDTH,
+            TILE_HEIGHT,
+            4,
+        )
+
+
+class Selector:
+    def __init__(self):
+        self.hovered_file = 0
+        self.hovered_rank = 0
+        self.selected_file = -1
+        self.selected_rank = -1
+
+    def update(self):
+        self.hovered_file = pyxel.mouse_x // TILE_WIDTH
+        self.hovered_rank = pyxel.mouse_y // TILE_HEIGHT
+
+    def draw(self):
+        if pyxel.btnp(pyxel.MOUSE_BUTTON_LEFT):
+            self.selected_file = pyxel.mouse_x // TILE_WIDTH
+            self.selected_rank = pyxel.mouse_y // TILE_HEIGHT
+
+        if self.selected_file >= 0 and self.selected_rank >= 0:
+            pyxel.blt(
+                self.selected_file * TILE_WIDTH,
+                self.selected_rank * TILE_HEIGHT,
+                0,
+                32,
+                64,
+                TILE_WIDTH,
+                TILE_HEIGHT,
+                0,
+            )
+
+        pyxel.blt(
+            self.hovered_file * TILE_WIDTH,
+            self.hovered_rank * TILE_HEIGHT,
+            0,
+            0,
+            64,
+            TILE_WIDTH,
+            TILE_HEIGHT,
+            0,
+        )
+
+
 class Checkers:
-    """something"""
+    """A game of checkers between two players"""
 
     def __init__(self):
+        pyxel.init(SCREEN_WIDTH, SCREEN_HEIGHT, title="Checkers", capture_scale=1)
+        pyxel.mouse(True)
+        pyxel.load("assets/resources.pyxres")
+
+        self.selector = Selector()
+
         self._board = self.create_board()
         self._players = []
-        self._last_move = {"player": None, "starting_square": None, "ending_square": None}
+        self._last_move = {
+            "player": None,
+            "starting_square": None,
+            "ending_square": None,
+        }
+
+        pyxel.run(self.update, self.draw)
+
+    def update(self):
+        if pyxel.btnp(pyxel.KEY_Q):
+            pyxel.quit()
+
+        self.selector.update()
+
+    def draw(self):
+        pyxel.cls(0)
+        for i in range(0, 8):
+            for j in range(0, 8):
+                if i % 2 == 0:
+                    if j % 2 == 0:
+                        pyxel.rect(
+                            i * TILE_WIDTH, j * TILE_HEIGHT, TILE_WIDTH, TILE_HEIGHT, 15
+                        )
+                    else:
+                        pyxel.rect(
+                            i * TILE_WIDTH, j * TILE_HEIGHT, TILE_WIDTH, TILE_HEIGHT, 4
+                        )
+                else:
+                    if j % 2 == 1:
+                        pyxel.rect(
+                            i * TILE_WIDTH, j * TILE_HEIGHT, TILE_WIDTH, TILE_HEIGHT, 15
+                        )
+                    else:
+                        pyxel.rect(
+                            i * TILE_WIDTH, j * TILE_HEIGHT, TILE_WIDTH, TILE_HEIGHT, 4
+                        )
+        for checker in self._board.values():
+            if checker is not None:
+                checker.draw()
+        self.selector.draw()
 
     def create_board(self):
         """Initialize checkers board with pieces"""
         board = {}
         coord = [0, 0]
-        piece = "White"
+        color = "White"
         for i in range(0, 8):
             if i == 5:
-                piece = "Black"
+                color = "Black"
             for j in range(0, 8):
                 coord[1] = j
                 coord[0] = i
                 if i not in {3, 4} and sum(coord) % 2 != 0:
-                    board[tuple(coord)] = piece
+                    board[tuple(coord)] = Checker(j, i, color, "standard")
                 else:
                     board[tuple(coord)] = None
         return board
@@ -104,7 +239,9 @@ class Checkers:
                 self._player_turn = self._players[i]
                 break
 
-    def play_game(self, player_name, starting_square_location, destination_square_location):
+    def play_game(
+        self, player_name, starting_square_location, destination_square_location
+    ):
         """Plays a move"""
 
         # check player_name exists
@@ -151,7 +288,9 @@ class Checkers:
             self._board[destination_square_location] = player_piece
 
         # check for captures
-        squares_jumped = abs(destination_square_location[1] - starting_square_location[1]) - 1
+        squares_jumped = (
+            abs(destination_square_location[1] - starting_square_location[1]) - 1
+        )
         stepper = [-1, +1]
         this_square = starting_square_location
         if destination_square_location[0] > starting_square_location[0]:
@@ -171,7 +310,9 @@ class Checkers:
 
         # check out of turn
         if self._last_move["player"] == player and not (
-                self._last_move["ending_square"] == starting_square_location and pieces_captured > 0):
+            self._last_move["ending_square"] == starting_square_location
+            and pieces_captured > 0
+        ):
             raise OutofTurn("It is not this player's turn")
 
         player.inc_captured_pieces_count(pieces_captured)
@@ -193,8 +334,11 @@ class Checkers:
 
     def print_board(self):
         """Prints the current board as an array of arrays of rows"""
-        all_pieces = [self._board[key] for key in sorted(self._board.keys(), key=lambda a: a[0], reverse=False)]
-        current_board = [all_pieces[i:i + 8] for i in range(0, 64, 8)]
+        all_pieces = [
+            self._board[key]
+            for key in sorted(self._board.keys(), key=lambda a: a[0], reverse=False)
+        ]
+        current_board = [all_pieces[i : i + 8] for i in range(0, 64, 8)]
         print(current_board)
 
     def game_winner(self):
@@ -203,24 +347,6 @@ class Checkers:
             if self._players[i].get_captured_pieces_count() == 12:
                 return self._players[i].get_player_name()
         return "Game has not ended"
-
-    def pretty_print_board(self):
-        """Pretty prints the current board"""
-        all_pieces = [self._board[key] for key in sorted(self._board.keys(), key=lambda a: a[0], reverse=False)]
-        all_symbols = [
-            "\033[97m\033[7m   \033[0m" if val == "White" else "\033[97m\033[7m k \033[0m" if val == "White_king"
-            else "\033[97m\033[7m K \033[0m" if val == "White_Triple_King" else "\033[90m\033[7m\033[1m   \033[0m"
-            if val == "Black" else "\033[90m\033[7m\033[1m k \033[0m" if val == "Black_king" else
-            "\033[90m\033[7m\033[1m K \033[0m" if val == "Black_Triple_King" else "   " for val in all_pieces]
-        print()
-        print(f"   +  -  +  -  +  -  +  -  +  -  +  -  +  -  +  -  +")
-        for i in range(0, 64, 4):
-            if i % 8 == 0:
-                print(f"\033[1m{int(i/8)}\033[0m  | {' | '.join(all_symbols[i:i + 8])} | ")
-            else:
-                print(f"   +  -  +  -  +  -  +  -  +  -  +  -  +  -  +  -  +")
-        print("\033[1m      0     1     2     3     4     5     6     7\033[0m")
-        print()
 
 
 class Player:
@@ -264,5 +390,4 @@ class Player:
         self._player_pieces["captured"] += val
 
 
-game = Checkers()
-game.pretty_print_board()
+Checkers()
