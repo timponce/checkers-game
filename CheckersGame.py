@@ -275,6 +275,7 @@ class App:
             "starting_square": None,
             "ending_square": None,
         }
+        self._game_winner = False
 
         pyxel.run(self.update, self.draw)
 
@@ -308,7 +309,7 @@ class App:
                 self._select_error = "INVALID SQUARE"
                 self._error_capture_time = pyxel.frame_count
 
-            self._board.print_board()
+            # self._board.print_board()
 
     def draw(self):
         pyxel.cls(0)
@@ -319,6 +320,14 @@ class App:
                 99,
                 112,
                 self._select_error,
+                0 if pyxel.frame_count % 30 < 25 else 7,
+            )
+
+        if self._game_winner:
+            pyxel.text(
+                99,
+                112,
+                f"{self._game_winner.upper()} WINS!!",
                 0 if pyxel.frame_count % 30 < 25 else 7,
             )
 
@@ -503,12 +512,7 @@ class App:
         )
 
         if player.get_captured_count() == 12:
-            pyxel.text(
-                99,
-                112,
-                f"{checker_color.upper()} WINS!!",
-                0 if pyxel.frame_count % 30 < 25 else 7,
-            )
+            self._game_winner = checker_color
 
         return
 
