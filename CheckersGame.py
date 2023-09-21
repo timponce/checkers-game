@@ -19,20 +19,8 @@ class InvalidSquare(Exception):
     pass
 
 
-class InvalidPlayer(Exception):
-    """Raised if player_name is not valid"""
-
-    pass
-
-
-class ExceedPlayerCount(Exception):
-    """Raised when a third player is attempted to be added"""
-
-    pass
-
-
-class InvalidColor(Exception):
-    """Raised when a player attempts to use a color that is already associated with another player"""
+class InvalidMove(Exception):
+    """Raised when a player makes an invalid move"""
 
     pass
 
@@ -59,108 +47,104 @@ TILE_HEIGHT = 32
 
 
 class Checker:
-    def __init__(self, file, rank, color, status):
-        self.file = file
-        self.rank = rank
-        self.color = color
-        self.status = status
+    def __init__(self, file, rank, color):
+        self._file = file
+        self._rank = rank
+        self._color = color
+        self._is_active = True
+        self._piece_type = "standard"
 
     def draw(self):
         pyx_u = 0
         pyx_v = 0
 
-        if self.color == "Black":
+        if self._color == "black":
             pyx_v = 32
         else:
             pyx_v = 0
 
-        if self.status == "standard":
+        if self._piece_type == "standard":
             pyx_u = 0
-        elif self.status == "king":
+        elif self._piece_type == "king":
             pyx_u = 32
-        else:
-            pyx_u = 64
 
-        pyxel.blt(
-            self.file * TILE_WIDTH,
-            self.rank * TILE_HEIGHT,
-            0,
-            pyx_u,
-            pyx_v,
-            TILE_WIDTH,
-            TILE_HEIGHT,
-            4,
-        )
-
-
-class Selector:
-    def __init__(self):
-        self.hovered_file = 0
-        self.hovered_rank = 0
-        self.selected_file = -1
-        self.selected_rank = -1
-
-    def update(self):
-        self.hovered_file = pyxel.mouse_x // TILE_WIDTH
-        self.hovered_rank = pyxel.mouse_y // TILE_HEIGHT
-
-    def draw(self):
-        if pyxel.btnp(pyxel.MOUSE_BUTTON_LEFT):
-            self.selected_file = pyxel.mouse_x // TILE_WIDTH
-            self.selected_rank = pyxel.mouse_y // TILE_HEIGHT
-
-        if self.selected_file >= 0 and self.selected_rank >= 0:
+        if self._is_active:
             pyxel.blt(
-                self.selected_file * TILE_WIDTH,
-                self.selected_rank * TILE_HEIGHT,
+                self._file * TILE_WIDTH,
+                SCREEN_HEIGHT - TILE_HEIGHT - (self._rank * TILE_HEIGHT),
                 0,
-                32,
-                64,
+                pyx_u,
+                pyx_v,
                 TILE_WIDTH,
                 TILE_HEIGHT,
-                0,
+                4,
             )
 
-        pyxel.blt(
-            self.hovered_file * TILE_WIDTH,
-            self.hovered_rank * TILE_HEIGHT,
-            0,
-            0,
-            64,
-            TILE_WIDTH,
-            TILE_HEIGHT,
-            0,
-        )
+    def get_coordinates(self):
+        return (self._file, self._rank)
+
+    def get_color(self):
+        return self._color
+
+    def get_status(self):
+        return self._is_active
+
+    def get_piece_type(self):
+        return self._piece_type
+
+    def set_coordinates(self, coordinates):
+        x, y = coordinates
+        self._file = x
+        self._rank = y
+
+    def set_status(self, new_status):
+        self._is_active = new_status
+
+    def set_piece_type(self, updated_type):
+        self._piece_type = updated_type
 
 
-class Checkers:
-    """A game of checkers between two players"""
+class Player:
+    def __init__(self, color):
+        self._color = color
+        self._pieces = {"standard": 12, "king": 0, "captured": 0}
+
+    def get_piece_color(self):
+        """Returns piece color"""
+        return self._color
+
+    def get_standard_count(self):
+        """Returns the number of standard pieces that the player has"""
+        return self._pieces["standard"]
+
+    def get_king_count(self):
+        """Returns the number of king pieces that the player has"""
+        return self._pieces["king"]
+
+    def get_captured_count(self):
+        """Returns the number of opponent pieces that the player has captured"""
+        return self._pieces["captured"]
+
+    def inc_standard_count(self, val):
+        """Updates the number of standard pieces that the player has"""
+        self._pieces["standard"] += val
+
+    def inc_king_count(self, val):
+        """Updates the number of king pieces that the player has"""
+        self._pieces["king"] += val
+
+    def inc_captured_count(self, val):
+        """Updates the number of opponent pieces that the player has captured"""
+        self._pieces["captured"] += val
+
+
+class Board:
+    """Represents a checkers board"""
 
     def __init__(self):
-        pyxel.init(SCREEN_WIDTH, SCREEN_HEIGHT, title="Checkers", capture_scale=1)
-        pyxel.mouse(True)
-        pyxel.load("assets/resources.pyxres")
-
-        self.selector = Selector()
-
-        self._board = self.create_board()
-        self._players = []
-        self._last_move = {
-            "player": None,
-            "starting_square": None,
-            "ending_square": None,
-        }
-
-        pyxel.run(self.update, self.draw)
-
-    def update(self):
-        if pyxel.btnp(pyxel.KEY_Q):
-            pyxel.quit()
-
-        self.selector.update()
+        self._board = self.init_board()
 
     def draw(self):
-        pyxel.cls(0)
         for i in range(0, 8):
             for j in range(0, 8):
                 if i % 2 == 0:
@@ -184,53 +168,186 @@ class Checkers:
         for checker in self._board.values():
             if checker is not None:
                 checker.draw()
-        self.selector.draw()
 
-    def create_board(self):
+    def init_board(self):
         """Initialize checkers board with pieces"""
         board = {}
         coord = [0, 0]
-        color = "White"
-        for i in range(0, 8):
-            if i == 5:
-                color = "Black"
-            for j in range(0, 8):
-                coord[1] = j
-                coord[0] = i
-                if i not in {3, 4} and sum(coord) % 2 != 0:
-                    board[tuple(coord)] = Checker(j, i, color, "standard")
+        color = "black"
+        for RANK in range(0, 8):
+            if RANK == 5:
+                color = "white"
+            for FILE in range(0, 8):
+                coord[0] = FILE
+                coord[1] = RANK
+                if RANK not in {3, 4} and sum(coord) % 2 == 0:
+                    board[tuple(coord)] = Checker(FILE, RANK, color)
                 else:
                     board[tuple(coord)] = None
         return board
 
-    def create_player(self, player_name, piece_color):
-        """Creates and returns a player"""
-        if piece_color not in {"White", "Black"}:
-            raise InvalidColor("This is not a valid color")
+    def is_playable(self, coordinates):
+        """Checks if the given coordinates are playable"""
+        x, y = coordinates
+        if not 0 <= x <= 7 or not 0 <= y <= 7:
+            raise InvalidSquare("This square does not exist")
+        if not sum_tuple(coordinates) % 2 == 0:
+            raise InvalidSquare("This square is not playable")
+        return True
 
-        num_players = len(self._players)
-        if num_players == 0:
-            player = Player(player_name, piece_color)
-            self._players.append(player)
-        elif num_players == 1:
-            if self._players[0].get_piece_color() != piece_color:
-                player = Player(player_name, piece_color)
-                self._players.append(player)
-            else:
-                raise InvalidColor("This color has already been chosen")
+    def get_square_details(self, coordinates):
+        """
+        Given x, y coordinates, returns:
+            Checker object if found
+            None if square is empty and playable
+            InvalidSquare exception if not playable or outside of board range
+        """
+        if self.is_playable(coordinates):
+            return self._board[coordinates]
+
+    def remove_from_board(self, coordinates):
+        """Removes the piece at the given coordinates"""
+        if self.is_playable(coordinates):
+            checker = self._board[coordinates]
+            checker.set_status(False)
+            self._board[coordinates] = None
+
+    def add_to_board(self, coordinates, checker):
+        """Adds the given piece at the given coordinates"""
+        if self.is_playable(coordinates) and not self.get_square_details(coordinates):
+            self._board[coordinates] = checker
         else:
-            raise ExceedPlayerCount("There can only be two players per game")
+            raise InvalidSquare("A piece already exists at this square")
 
-        if piece_color == "Black":
-            self._player_turn = player
-        return player
+    def move_piece(self, starting_coordinates, ending_coordinates, checker):
+        """Moves the given piece from the starting coordinates to the ending coordinates"""
+        if (
+            self.is_playable(starting_coordinates)
+            and self.is_playable(ending_coordinates)
+            and not self.get_square_details(ending_coordinates)
+        ):
+            checker.set_coordinates((ending_coordinates))
+            self._board[starting_coordinates] = None
+            self._board[ending_coordinates] = checker
+        else:
+            raise InvalidSquare("A piece already exists at this square")
 
-    def get_player(self, player_name):
-        """Returns player name and piece color in tuple"""
-        for i in range(len(self._players)):
-            if self._players[i].get_player_name() == player_name:
-                return self._players[i]
-        raise InvalidPlayer("This player does not exist")
+    def promote_piece(self, coordinates):
+        """Promote a piece at the given coordinates"""
+        x, y = coordinates
+        checker = self.get_square_details(coordinates)
+        piece_type = checker.get_piece_type()
+        if self.is_playable(coordinates) and checker and checker.get_status():
+            if piece_type == "standard":
+                checker.set_piece_type("king")
+
+    def print_board(self):
+        """Prints the current board as an array of arrays of rows"""
+        all_pieces = [
+            self._board[key].get_color()[:2] if self._board[key] else None
+            for key in sorted(self._board.keys(), key=lambda a: a[1], reverse=False)
+        ]
+        current_board = [all_pieces[i : i + 8] for i in range(0, 64, 8)]
+        for each_row in current_board:
+            print(each_row)
+
+
+class App:
+    """A game of checkers between two players"""
+
+    def __init__(self):
+        pyxel.init(SCREEN_WIDTH, SCREEN_HEIGHT, title="Checkers", capture_scale=1)
+        pyxel.mouse(True)
+        pyxel.load("assets/resources.pyxres")
+        self._select_error = False
+        self._error_capture_time = 0
+
+        self._hovered_file = None
+        self._hovered_rank = None
+        self._selected_file = None
+        self._selected_rank = None
+
+        self._board = Board()
+        self._players = [Player("black"), Player("white")]
+        self._player_turn = self._players[0]
+        self._last_move = {
+            "color": None,
+            "starting_square": None,
+            "ending_square": None,
+        }
+
+        pyxel.run(self.update, self.draw)
+
+    def update(self):
+        if pyxel.btnp(pyxel.KEY_Q):
+            pyxel.quit()
+
+        self._hovered_file = pyxel.mouse_x // TILE_WIDTH
+        self._hovered_rank = pyxel.mouse_y // TILE_HEIGHT
+
+        if pyxel.btnp(pyxel.MOUSE_BUTTON_LEFT):
+            x, y = pyxel.mouse_x // TILE_WIDTH, pyxel.mouse_y // TILE_HEIGHT
+            if self._selected_file is not None and self._selected_rank is not None:
+                try:
+                    if not self._board.get_square_details((x, 7 - y)):
+                        self.play_game(
+                            self._board.get_square_details(
+                                (self._selected_file, self._selected_rank)
+                            ).get_color(),
+                            (self._selected_file, self._selected_rank),
+                            (x, 7 - y),
+                        )
+                except:
+                    pass
+
+            try:
+                if self._board.get_square_details((x, 7 - y)):
+                    self._selected_file, self._selected_rank = x, 7 - y
+                    self._select_error = False
+            except:
+                self._select_error = "INVALID SQUARE"
+                self._error_capture_time = pyxel.frame_count
+
+            self._board.print_board()
+
+    def draw(self):
+        pyxel.cls(0)
+        self._board.draw()
+
+        if self._select_error and pyxel.frame_count - self._error_capture_time < 90:
+            pyxel.text(
+                99,
+                112,
+                self._select_error,
+                0 if pyxel.frame_count % 30 < 25 else 7,
+            )
+
+        if pyxel.btnp(pyxel.MOUSE_BUTTON_LEFT):
+            x = pyxel.mouse_x // TILE_WIDTH
+            y = (SCREEN_HEIGHT - pyxel.mouse_y) // TILE_HEIGHT
+
+        if self._selected_file is not None and self._selected_rank is not None:
+            pyxel.blt(
+                self._selected_file * TILE_WIDTH,
+                SCREEN_HEIGHT - TILE_HEIGHT - (self._selected_rank * TILE_HEIGHT),
+                0,
+                32,
+                64,
+                TILE_WIDTH,
+                TILE_HEIGHT,
+                0,
+            )
+
+        pyxel.blt(
+            self._hovered_file * TILE_WIDTH,
+            self._hovered_rank * TILE_HEIGHT,
+            0,
+            0,
+            64,
+            TILE_WIDTH,
+            TILE_HEIGHT,
+            0,
+        )
 
     def change_turn(self):
         """Change player who's turn it is"""
@@ -240,154 +357,167 @@ class Checkers:
                 break
 
     def play_game(
-        self, player_name, starting_square_location, destination_square_location
+        self, checker_color, starting_square_location, destination_square_location
     ):
         """Plays a move"""
-
-        # check player_name exists
-        player = self.get_player(player_name)
-        for i in range(len(self._players)):
-            if player != self._players[i]:
-                opponent = self._players[i]
-        player_color = player.get_piece_color()
+        player = None
+        opponent = None
+        for i, a_player in enumerate(self._players):
+            if a_player.get_piece_color() == checker_color:
+                player = a_player
+                j = 0 if i == 1 else 1
+                opponent = self._players[j]
+                break
         pieces_captured = 0
 
         # set home and opponent ranks
-        player_home_rank = 7
-        opponent_home_rank = 0
-        if player_color == "White":
-            temp = player_home_rank
-            player_home_rank = opponent_home_rank
-            opponent_home_rank = temp
+        player_home_rank = 0
+        opponent_home_rank = 7
+        if checker_color == "white":
+            player_home_rank, opponent_home_rank = opponent_home_rank, player_home_rank
 
         # check if the starting square is valid and owned by player/is valid
-        if self.get_checker_details(starting_square_location):
-            if player_color not in self.get_checker_details(starting_square_location):
+        player_checker = self._board.get_square_details(starting_square_location)
+        if self._board.get_square_details(starting_square_location) and checker_color:
+            if checker_color != player_checker.get_color():
                 raise InvalidSquare("Invalid starting square")
 
-        # check if destination square exists/is valid
-        self.get_checker_details(destination_square_location)
+        # check if destination square is playable and is not occupied
+        try:
+            self._board.is_playable(
+                destination_square_location
+            ) and not self._board.get_square_details(destination_square_location)
+        except:
+            self._select_error = "INVALID SQUARE"
+            self._error_capture_time = pyxel.frame_count
 
-        player_piece = self.get_checker_details(starting_square_location)
+        # determine valid moves along piece's diagonal(s)
+        valid_destinations = []
 
-        # update board and check for promotions
-        self._board[starting_square_location] = None
-        # if opponent home row, piece == king
-        # if home row, piece == triple king
-        # else, piece == piece
-        if destination_square_location[0] == opponent_home_rank:
-            self._board[destination_square_location] = f"{player_color}_king"
-            player.inc_king_count(1)
-            change_turn_bool = False
-        elif destination_square_location[0] == player_home_rank:
-            self._board[destination_square_location] = f"{player_color}_Triple_King"
-            player.inc_king_count(-1)
-            player.inc_triple_king_count(1)
-            change_turn_bool = False
+        this_square = starting_square_location
+        stepper = [None, None]
+
+        if checker_color == "black":
+            stepper[1] = 1
         else:
-            self._board[destination_square_location] = player_piece
+            stepper[1] = -1
+
+        stepper[0] = 1
+        for i in range(6):
+            this_square = step_coord(this_square, stepper)
+            valid_destinations.append(this_square)
+
+        this_square = starting_square_location
+        stepper[0] = -1
+        for i in range(6):
+            this_square = step_coord(this_square, stepper)
+            valid_destinations.append(this_square)
+
+        if player_checker.get_piece_type() == "king":
+            this_square = starting_square_location
+            stepper[1] = -1 * stepper[1]
+            stepper[0] = 1
+            for i in range(6):
+                this_square = step_coord(this_square, stepper)
+                valid_destinations.append(this_square)
+
+            this_square = starting_square_location
+            stepper[0] = -1
+            for i in range(6):
+                this_square = step_coord(this_square, stepper)
+                valid_destinations.append(this_square)
+
+        if destination_square_location not in valid_destinations:
+            self._select_error = "ILLEGAL MOVE"
+            self._error_capture_time = pyxel.frame_count
+            raise InvalidMove("This is not a legal move")
 
         # check for captures
         squares_jumped = (
             abs(destination_square_location[1] - starting_square_location[1]) - 1
         )
-        stepper = [-1, +1]
+        stepper = [+1, +1]
         this_square = starting_square_location
-        if destination_square_location[0] > starting_square_location[0]:
-            stepper[0] = +1
+        if destination_square_location[0] < starting_square_location[0]:
+            stepper[0] = -1
         if destination_square_location[1] < starting_square_location[1]:
             stepper[1] = -1
-        for i in range(squares_jumped):
-            this_square = step_coord(this_square, stepper)
-            this_piece = self.get_checker_details(this_square)
-            if this_piece is not None:
-                if "_king" in this_piece:
-                    opponent.inc_king_count(-1)
-                elif "_Triple_King" in this_piece:
-                    opponent.inc_triple_king_count(-1)
-                pieces_captured += 1
-                self._board[tuple(this_square)] = None
 
-        # check out of turn
-        if self._last_move["player"] == player and not (
-            self._last_move["ending_square"] == starting_square_location
-            and pieces_captured > 0
-        ):
+        if squares_jumped == 0 and self._last_move["color"] == checker_color:
+            self._select_error = "NOT THIS PLAYER'S TURN"
+            self._error_capture_time = pyxel.frame_count
             raise OutofTurn("It is not this player's turn")
 
-        player.inc_captured_pieces_count(pieces_captured)
+        for i in range(squares_jumped):
+            this_square = step_coord(this_square, stepper)
+            this_piece = self._board.get_square_details(this_square)
 
-        self._last_move["player"] = player
+            if squares_jumped > 1 or (squares_jumped == 1 and this_piece is None):
+                self._select_error = "ILLEGAL MOVE"
+                self._error_capture_time = pyxel.frame_count
+                raise InvalidMove("This is not a legal move")
+
+            if this_piece is not None:
+                if this_piece.get_color() == checker_color:
+                    self._select_error = "ILLEGAL MOVE"
+                    self._error_capture_time = pyxel.frame_count
+                    raise InvalidMove("This is not a legal move")
+
+                if self._last_move["color"] == checker_color and not (
+                    self._last_move["ending_square"] == starting_square_location
+                    and this_piece.get_color() == opponent.get_piece_color()
+                ):
+                    self._select_error = "NOT THIS PLAYER'S TURN"
+                    self._error_capture_time = pyxel.frame_count
+                    raise OutofTurn("It is not this player's turn")
+
+                if this_piece.get_piece_type() == "king":
+                    opponent.inc_king_count(-1)
+                else:
+                    opponent.inc_standard_count(-1)
+                pieces_captured += 1
+                self._board.remove_from_board(this_square)
+
+        player.inc_captured_count(pieces_captured)
+
+        self._last_move["color"] = player.get_piece_color()
         self._last_move["starting_square"] = starting_square_location
         self._last_move["ending_square"] = destination_square_location
 
-        return pieces_captured
+        self._selected_file = None
+        self._selected_rank = None
 
-    def get_checker_details(self, square_location):
-        """Returns the piece that is on a square"""
-        if not 0 <= square_location[0] <= 7 or not 0 <= square_location[1] <= 7:
-            raise InvalidSquare("This square does not exist")
-        elif sum_tuple(square_location) % 2 == 0:
-            raise InvalidSquare("This square is not playable")
-        else:
-            return self._board[square_location]
+        # update board and check for promotions
+        # if opponent home row, piece == king
+        # else, piece == piece
+        if (
+            destination_square_location[1] == opponent_home_rank
+            and player_checker.get_piece_type() == "standard"
+        ):
+            player.inc_standard_count(-1)
+            player.inc_king_count(1)
+            player_checker.set_piece_type("king")
 
-    def print_board(self):
-        """Prints the current board as an array of arrays of rows"""
-        all_pieces = [
-            self._board[key]
-            for key in sorted(self._board.keys(), key=lambda a: a[0], reverse=False)
-        ]
-        current_board = [all_pieces[i : i + 8] for i in range(0, 64, 8)]
-        print(current_board)
+        self._board.move_piece(
+            starting_square_location, destination_square_location, player_checker
+        )
+
+        if player.get_captured_count() == 12:
+            pyxel.text(
+                99,
+                112,
+                f"{checker_color.upper()} WINS!!",
+                0 if pyxel.frame_count % 30 < 25 else 7,
+            )
+
+        return
 
     def game_winner(self):
         """Returns the winner of the game, if the game is over"""
         for i in range(len(self._players)):
-            if self._players[i].get_captured_pieces_count() == 12:
-                return self._players[i].get_player_name()
+            if self._players[i].get_captured_count() == 12:
+                return self._players[i]
         return "Game has not ended"
 
 
-class Player:
-    """Represents a player of the game Checkers"""
-
-    def __init__(self, player_name, piece_color):
-        self._player_name = player_name
-        self._piece_color = piece_color
-        self._player_pieces = {"king": 0, "triple king": 0, "captured": 0}
-
-    def get_player_name(self):
-        """Returns the player name"""
-        return self._player_name
-
-    def get_piece_color(self):
-        """Returns piece color"""
-        return self._piece_color
-
-    def get_king_count(self):
-        """Returns the number of king pieces that the player has"""
-        return self._player_pieces["king"]
-
-    def inc_king_count(self, val):
-        """Updates the number of king pieces that the player has"""
-        self._player_pieces["king"] += val
-
-    def get_triple_king_count(self):
-        """Returns the number of triple king pieces that the player has"""
-        return self._player_pieces["triple king"]
-
-    def inc_triple_king_count(self, val):
-        """Updates the number of triple king pieces that the player has"""
-        self._player_pieces["triple king"] += val
-
-    def get_captured_pieces_count(self):
-        """Returns the number of opponent pieces that the player has captured"""
-        return self._player_pieces["captured"]
-
-    def inc_captured_pieces_count(self, val):
-        """Updates the number of opponent pieces that the player has captured"""
-        self._player_pieces["captured"] += val
-
-
-Checkers()
+App()
